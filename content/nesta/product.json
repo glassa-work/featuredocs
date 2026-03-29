@@ -1,0 +1,7 @@
+{
+  "name": "Nesta",
+  "tagline": "A calm, local-first family calendar",
+  "description": "Nesta is a shared scheduling app designed for one purpose: keeping your household in sync. Built with privacy and simplicity at its core.",
+  "versions": ["0.2.0", "0.1.0"],
+  "latest": "0.2.0"
+}
