@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
+import { submitFeedback } from "@/lib/api/feedback";
 
 declare global {
   interface Window {
@@ -114,31 +115,36 @@ export default function FeedbackDialog({
     setError(null);
 
     try {
-      const response = await fetch("/api/feedback", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          product,
-          feature,
-          version,
-          locale,
-          type,
-          selectedText,
-          videoReference,
-          comment: comment.trim(),
-          email: email.trim() || undefined,
-          website: honeypot,
-          turnstileToken: turnstileToken ?? "",
-        }),
-      });
-
-      if (response.status === 429) {
-        setError("Too many submissions. Please try again later.");
+      // Honeypot check: silently succeed if bot filled hidden field
+      if (honeypot) {
+        setSubmitted(true);
+        setTimeout(() => {
+          onClose();
+          setComment("");
+          setEmail("");
+          setHoneypot("");
+          setTurnstileToken(null);
+          setSubmitted(false);
+        }, 2000);
         return;
       }
 
-      if (!response.ok) {
-        throw new Error("Failed to submit feedback");
+      const result = await submitFeedback({
+        product,
+        feature,
+        version,
+        locale,
+        type,
+        selectedText,
+        videoReference,
+        comment: comment.trim(),
+        email: email.trim() || undefined,
+        turnstileToken: turnstileToken ?? "",
+      });
+
+      if (!result.success) {
+        setError(result.message || "Failed to submit feedback");
+        return;
       }
 
       setSubmitted(true);

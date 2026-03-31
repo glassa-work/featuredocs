@@ -1,53 +1,118 @@
-import { notFound } from "next/navigation";
+"use client";
+
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
-  loadProduct,
-  loadFeatures,
-  getFeatureFromManifest,
-  renderFeatureDoc,
-  loadFeatureDoc,
-  resolveVideoUrl,
-  videoExistsOnDisk,
-  getLocalizedValue,
-} from "@/lib/content";
+  getProduct,
+  getDocument,
+  listFeatures,
+} from "@/lib/api/content";
+import type { ProductResponse, FeatureResponse } from "@/lib/api/content";
 import VersionSelector from "@/components/VersionSelector";
 import FeedbackButton from "@/components/FeedbackButton";
 import LocaleSwitcher from "@/components/LocaleSwitcher";
-import FeaturePageClient from "@/components/FeaturePageClient";
 import InlineEditor from "@/components/InlineEditor";
 import DraftBanner from "@/components/DraftBanner";
 
-interface FeatureVersionPageProps {
-  params: Promise<{
-    product: string;
-    locale: string;
-    feature: string;
-    version: string;
-  }>;
+/** Resolve a localized value with fallback to default locale, then first available. */
+function getLocalizedValue(
+  localizedMap: Record<string, string>,
+  locale: string,
+  defaultLocale: string,
+): string {
+  return (
+    localizedMap[locale] ??
+    localizedMap[defaultLocale] ??
+    Object.values(localizedMap)[0] ??
+    ""
+  );
 }
 
-export default async function FeatureVersionPage({
-  params,
+interface FeatureVersionPageProps {
+  productSlug: string;
+  locale: string;
+  featureSlug: string;
+  version: string;
+}
+
+export default function FeatureVersionPage({
+  productSlug,
+  locale,
+  featureSlug,
+  version,
 }: FeatureVersionPageProps) {
-  const {
-    product: productSlug,
-    locale,
-    feature: featureSlug,
-    version,
-  } = await params;
-  const product = loadProduct(productSlug);
+  const [product, setProduct] = useState<ProductResponse | null>(null);
+  const [feature, setFeature] = useState<FeatureResponse | null>(null);
+  const [rawMarkdown, setRawMarkdown] = useState<string>("");
+  const [renderedHtml, setRenderedHtml] = useState<string>("");
+  const [versionStatus, setVersionStatus] = useState<string>("published");
+  const [isLoading, setIsLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
 
-  if (!product) {
-    notFound();
+  useEffect(() => {
+    async function loadData() {
+      const productData = await getProduct(productSlug);
+      if (!productData) {
+        setNotFound(true);
+        setIsLoading(false);
+        return;
+      }
+
+      if (!productData.locales.includes(locale)) {
+        setNotFound(true);
+        setIsLoading(false);
+        return;
+      }
+
+      setProduct(productData);
+
+      // Get version status
+      const featuresData = await listFeatures(productSlug, version, true);
+      setVersionStatus(featuresData.versionStatus);
+
+      // Get the document
+      const doc = await getDocument(productSlug, version, locale, featureSlug);
+      if (!doc || !doc.feature) {
+        setFeature(null);
+        setIsLoading(false);
+        return;
+      }
+
+      setFeature(doc.feature);
+      setRawMarkdown(doc.content);
+      setRenderedHtml(doc.renderedHtml);
+      setIsLoading(false);
+    }
+
+    loadData();
+  }, [productSlug, locale, featureSlug, version]);
+
+  if (isLoading) {
+    return (
+      <div className="mx-auto max-w-4xl px-6 py-12">
+        <div className="py-12 text-center text-sm text-[#6B6B6B]">
+          Loading...
+        </div>
+      </div>
+    );
   }
 
-  // Validate locale
-  if (!product.locales.includes(locale)) {
-    notFound();
+  if (notFound) {
+    return (
+      <div className="mx-auto max-w-4xl px-6 py-12 text-center">
+        <h1 className="font-serif text-2xl font-bold text-[#1A1A1A]">
+          Not found
+        </h1>
+        <p className="mt-2 text-sm text-[#6B6B6B]">
+          The page you are looking for does not exist.
+        </p>
+      </div>
+    );
   }
 
-  const feature = getFeatureFromManifest(productSlug, version, featureSlug);
+  if (!product) return null;
 
+  // Feature does not exist in this version
   if (!feature) {
     return (
       <div className="mx-auto max-w-4xl px-6 py-12">
@@ -82,25 +147,13 @@ export default async function FeatureVersionPage({
     );
   }
 
-  const html = await renderFeatureDoc(productSlug, version, locale, featureSlug);
-  const rawMarkdown = await loadFeatureDoc(productSlug, version, locale, featureSlug);
-
-  if (!html || !rawMarkdown) {
-    notFound();
-  }
-
-  // Resolve video URLs with locale fallback
-  const videoUrls = buildVideoUrlMap(html, productSlug, version, locale);
   const featureTitle = getLocalizedValue(
     feature.title,
     locale,
-    product.defaultLocale
+    product.defaultLocale,
   );
   const isLatest = version === product.latest;
-
-  // Check draft status
-  const manifest = loadFeatures(productSlug, version);
-  const isDraft = manifest?.status === "draft";
+  const isDraft = versionStatus === "draft";
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-12">
@@ -162,38 +215,9 @@ export default async function FeatureVersionPage({
           locale={locale}
           slug={featureSlug}
           initialMarkdown={rawMarkdown}
-          renderedHtml={html}
+          renderedHtml={renderedHtml}
         />
       </div>
     </div>
   );
-}
-
-/**
- * Extract all video references from rendered HTML and resolve their URLs.
- */
-function buildVideoUrlMap(
-  html: string,
-  productSlug: string,
-  version: string,
-  locale: string
-): Record<string, { url: string; exists: boolean }> {
-  const videoPattern =
-    /data-video="([^"]+)"/g;
-  const urls: Record<string, { url: string; exists: boolean }> = {};
-
-  let match: RegExpExecArray | null;
-  while ((match = videoPattern.exec(html)) !== null) {
-    const videoRef = match[1];
-    if (!urls[videoRef]) {
-      // The video reference in markdown is like "videos/demo_day_view.mp4"
-      // We need to extract just the filename for the locale-aware resolver
-      const filename = videoRef.replace(/^videos\//, "");
-      const url = resolveVideoUrl(productSlug, version, locale, filename);
-      const exists = videoExistsOnDisk(productSlug, version, locale, filename);
-      urls[videoRef] = { url, exists };
-    }
-  }
-
-  return urls;
 }

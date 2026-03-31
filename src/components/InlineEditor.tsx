@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
+import { saveDocument } from "@/lib/api/content";
 
 interface InlineEditorProps {
   product: string;
@@ -50,23 +51,17 @@ export default function InlineEditor({
     setSaveResult(null);
 
     try {
-      const response = await fetch("/api/content/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          product,
-          version,
-          locale,
-          slug,
-          content: markdown,
-          editMessage: editMessage.trim(),
-        }),
+      const result = await saveDocument({
+        product,
+        version,
+        locale,
+        featureSlug: slug,
+        content: markdown,
+        editMessage: editMessage.trim(),
       });
 
-      const data = await response.json();
-
-      if (response.ok) {
-        setSaveResult({ success: true, message: data.message });
+      if (result.success) {
+        setSaveResult({ success: true, message: result.message });
         setTimeout(() => {
           setIsEditing(false);
           setSaveResult(null);
@@ -75,7 +70,7 @@ export default function InlineEditor({
       } else {
         setSaveResult({
           success: false,
-          message: data.error ?? "Failed to save",
+          message: result.message || "Failed to save",
         });
       }
     } catch {

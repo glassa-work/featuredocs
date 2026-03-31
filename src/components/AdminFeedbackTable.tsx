@@ -1,10 +1,14 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import type { FeedbackItem } from "@/lib/types";
+import {
+  listFeedback,
+  updateFeedbackStatus as updateStatus,
+} from "@/lib/api/feedback";
+import type { FeedbackItemResponse } from "@/lib/api/feedback";
 
 export default function AdminFeedbackTable() {
-  const [feedbackItems, setFeedbackItems] = useState<FeedbackItem[]>([]);
+  const [feedbackItems, setFeedbackItems] = useState<FeedbackItemResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filterProduct, setFilterProduct] = useState<string>("");
   const [filterStatus, setFilterStatus] = useState<string>("");
@@ -13,16 +17,12 @@ export default function AdminFeedbackTable() {
   const fetchFeedback = useCallback(async () => {
     setIsLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (filterProduct) params.set("product", filterProduct);
-      if (filterStatus) params.set("status", filterStatus);
-      if (filterType) params.set("type", filterType);
-
-      const response = await fetch(`/api/admin/feedback?${params.toString()}`);
-      if (response.ok) {
-        const data = await response.json();
-        setFeedbackItems(data);
-      }
+      const items = await listFeedback({
+        product: filterProduct || undefined,
+        status: filterStatus || undefined,
+        type: filterType || undefined,
+      });
+      setFeedbackItems(items);
     } catch {
       // Silent failure for admin page
     } finally {
@@ -34,14 +34,10 @@ export default function AdminFeedbackTable() {
     fetchFeedback();
   }, [fetchFeedback]);
 
-  async function handleStatusUpdate(id: number, status: string) {
+  async function handleStatusUpdate(id: number, newStatus: string) {
     try {
-      const response = await fetch("/api/admin/feedback", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, status }),
-      });
-      if (response.ok) {
+      const result = await updateStatus(id, newStatus);
+      if (result) {
         fetchFeedback();
       }
     } catch {
