@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { execSync } from "child_process";
 import chalk from "chalk";
 import { loadConfig } from "../config.js";
 import { uploadDirectoryToR2, uploadFileToR2 } from "../r2.js";
@@ -146,6 +147,45 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
         "No content destination configured. Set contentDir in .featuredocs.json or R2 credentials."
       )
     );
+  }
+
+  // Auto-deploy: build + push to Firebase Hosting
+  const engineDir = config.engineDir;
+  const firebaseProject = config.firebaseProject;
+  const firebaseSite = config.firebaseSite;
+
+  if (engineDir && firebaseProject && firebaseSite) {
+    console.log(chalk.cyan("\nDeploying to Firebase Hosting..."));
+
+    try {
+      // Git commit the content changes in the engine repo
+      const gitStatus = execSync("git status --porcelain", { cwd: engineDir, encoding: "utf-8" });
+      if (gitStatus.trim()) {
+        execSync("git add content/", { cwd: engineDir, stdio: "inherit" });
+        execSync(
+          `git commit -m "docs(${product}): publish v${version} (${status})"`,
+          { cwd: engineDir, stdio: "inherit" }
+        );
+        execSync("git push", { cwd: engineDir, stdio: "inherit" });
+        console.log(chalk.green("  Committed and pushed content changes"));
+      }
+
+      // Build static site
+      console.log(chalk.cyan("  Building static site..."));
+      execSync("npm run build", { cwd: engineDir, stdio: "inherit" });
+
+      // Deploy to Firebase
+      console.log(chalk.cyan("  Uploading to Firebase Hosting..."));
+      execSync(
+        `firebase deploy --only hosting:${firebaseSite} --project ${firebaseProject}`,
+        { cwd: engineDir, stdio: "inherit", env: { ...process.env, FIREBASE_TOKEN: undefined } }
+      );
+
+      console.log(chalk.green(`\n✅ Live at https://${firebaseSite}.web.app/${product}/`));
+    } catch (err) {
+      console.log(chalk.red("\nDeploy failed. Content was copied but site wasn't updated."));
+      console.log(chalk.red(`Run manually: cd ${engineDir} && npm run build && firebase deploy`));
+    }
   }
 
   console.log("");
