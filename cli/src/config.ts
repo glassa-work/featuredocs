@@ -10,6 +10,9 @@ export interface FeaturedocsConfig {
   } | null;
   contentDir: string | null;
   githubRepo: string | null;
+  engineDir: string | null;
+  firebaseProject: string | null;
+  firebaseSite: string | null;
 }
 
 const CONFIG_FILENAME = ".featuredocs.json";
@@ -51,5 +54,17 @@ export function loadConfig(): FeaturedocsConfig {
       process.env.FEATUREDOCS_CONTENT_DIR ??
       null,
     githubRepo: (fileConfig.githubRepo as string) ?? null,
+    engineDir:
+      (fileConfig.engineDir as string) ??
+      process.env.FEATUREDOCS_ENGINE_DIR ??
+      null,
+    firebaseProject:
+      (fileConfig.firebaseProject as string) ??
+      process.env.FEATUREDOCS_FIREBASE_PROJECT ??
+      null,
+    firebaseSite:
+      (fileConfig.firebaseSite as string) ??
+      process.env.FEATUREDOCS_FIREBASE_SITE ??
+      null,
   };
 }
