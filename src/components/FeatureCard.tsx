@@ -1,15 +1,32 @@
 import Link from "next/link";
-import type { Feature } from "@/lib/types";
-import { getLocalizedValue } from "@/lib/content";
 import FeedbackBadge from "./FeedbackBadge";
 
 interface FeatureCardProps {
-  feature: Feature;
+  feature: {
+    slug: string;
+    title: Record<string, string>;
+    summary: Record<string, string>;
+    video: string;
+  };
   productSlug: string;
   locale: string;
   defaultLocale: string;
   version: string;
   feedbackCount: number;
+}
+
+/** Resolve a localized value with fallback to default locale, then first available. */
+function getLocalizedValue(
+  localizedMap: Record<string, string>,
+  locale: string,
+  defaultLocale: string,
+): string {
+  return (
+    localizedMap[locale] ??
+    localizedMap[defaultLocale] ??
+    Object.values(localizedMap)[0] ??
+    ""
+  );
 }
 
 export default function FeatureCard({

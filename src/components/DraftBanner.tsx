@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
+import { publishVersion } from "@/lib/api/content";
 
 interface DraftBannerProps {
   showPublishButton?: boolean;
@@ -21,17 +22,12 @@ export default function DraftBanner({
     );
     if (!confirmed) return;
 
-    const response = await fetch("/api/content/publish", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ product, version }),
-    });
+    const result = await publishVersion(product, version);
 
-    if (response.ok) {
+    if (result.success) {
       window.location.reload();
     } else {
-      const data = await response.json();
-      alert(data.error ?? "Failed to publish");
+      alert(result.message || "Failed to publish");
     }
   }, [product, version]);
 
